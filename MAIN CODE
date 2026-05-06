@@ -1,0 +1,132 @@
+`timescale 1ns / 1ps
+
+module smart_traffic_advanced(
+    input clk,
+    input reset,
+    input ped_request,
+    input emergency,
+    output reg [1:0] roadA,
+    output reg [1:0] roadB
+);
+
+    // ---------------- STATE SIGNALS ----------------
+    reg [1:0] state, next_state;
+
+    // ---------------- TIMERS ----------------
+    reg [25:0] count;        // traffic timer
+    reg [3:0] ped_count;     // pedestrian walk timer
+
+    reg ped_active;
+
+    // =================================================
+    // 1. TRAFFIC TIMER
+    // =================================================
+    always @(posedge clk or posedge reset)
+    begin
+        if (reset)
+            count <= 0;
+
+        else if (count == 3)
+            count <= 0;
+
+        else
+            count <= count + 1;
+    end
+
+    // =================================================
+    // 2. PEDESTRIAN TIMER
+    // =================================================
+    always @(posedge clk or posedge reset)
+    begin
+        if (reset) begin
+            ped_count <= 0;
+            ped_active <= 0;
+        end
+
+        else if (ped_request && !ped_active) begin
+            ped_active <= 1;
+            ped_count <= 0;
+        end
+
+        else if (ped_active) begin
+            ped_count <= ped_count + 1;
+
+            if (ped_count == 5)   // WALK TIME
+                ped_active <= 0;
+        end
+    end
+
+    // =================================================
+    // 3. STATE REGISTER (FSM CORE)
+    // =================================================
+    always @(posedge clk or posedge reset)
+    begin
+        if (reset)
+            state <= 2'b00;
+
+        else if (emergency)
+            state <= 2'b00;   // emergency override
+
+        else if (ped_active)
+            state <= 2'b11;   // pedestrian state
+
+        else if (count == 3)
+            state <= next_state;
+    end
+
+    // =================================================
+    // 4. NEXT STATE LOGIC
+    // =================================================
+    always @(*)
+    begin
+        case(state)
+
+            2'b00: next_state = 2'b01;
+            2'b01: next_state = 2'b10;
+            2'b10: next_state = 2'b11;
+            2'b11: next_state = 2'b00;
+
+            default: next_state = 2'b00;
+        endcase
+    end
+
+    // =================================================
+    // 5. OUTPUT LOGIC
+    // =================================================
+    always @(*)
+    begin
+        case(state)
+
+            // ROAD A GREEN
+            2'b00: begin
+                roadA = 2'b10;
+                roadB = 2'b00;
+            end
+
+            // ROAD A YELLOW
+            2'b01: begin
+                roadA = 2'b01;
+                roadB = 2'b00;
+            end
+
+            // ROAD B GREEN
+            2'b10: begin
+                roadA = 2'b00;
+                roadB = 2'b10;
+            end
+
+            // ROAD B YELLOW
+            2'b11: begin
+                roadA = 2'b00;
+                roadB = 2'b00;  // pedestrian = all red
+            end
+
+            default: begin
+                roadA = 2'b00;
+                roadB = 2'b00;
+            end
+        endcase
+    end
+
+endmodule
+
